@@ -1,3 +1,3 @@
 # pychess
 
-My own chess "**engine**"
+My own chess "*engine*"
