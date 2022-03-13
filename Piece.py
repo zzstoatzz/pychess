@@ -17,7 +17,7 @@ class Piece:
             self.on = [self.on].append(new_position)
 
     def __repr__(self: object):
-        color = "white" if self.color == "white" else "magenta"
+        color = self.color if self.color != "black" else "magenta"
         message = colored(f"{self.kind}", color)
 
         buffer = 16 - len(message)
@@ -71,6 +71,14 @@ class King(Piece):
         self.kind = "king"
         self.on = square_location
         self.material_worth = np.inf
+
+
+class Marker(Piece):
+    def __init__(self, square_location: str, color: str = "blue"):
+        self.color = color
+        self.kind = "marker"
+        self.on = square_location
+        self.material_worth = None
 
 
 mappy = {"B": Bishop, "K": King, "N": Knight, "P": Pawn, "Q": Queen, "R": Rook}
