@@ -9,6 +9,13 @@ class Color(Enum):
     RESET = "\x1b[0m"
 
 
+class DockerRepo(Enum):
+    """Enum holding Docker repository names."""
+
+    STOCKFISH = "ghcr.io/x64squares/stockfish-socket-server"
+    LCZERO = "..."
+
+
 class OSBin(Enum):
     """Enum holding OS-specific location of binaries for the chess engine.
 

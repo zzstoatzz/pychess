@@ -3,7 +3,7 @@ import httpx
 from prefect import task
 from prefect.blocks.system import Secret
 from pydantic import BaseModel, HttpUrl, validator
-from typing import List
+from typing import List, Optional
 
 from platforms import ChessPlayer
 
@@ -45,8 +45,18 @@ def _make_digest_blocks(player: ChessPlayer, games: List[GameDigest], n_days: in
 
 
 @task
-def send_digest(player: ChessPlayer, games: List[GameDigest], n_days: int):
+def send_digest(
+    player: ChessPlayer,
+    games: List[GameDigest],
+    n_days: int,
+    top_N_games: Optional[int] = None,
+):
     """Builds a Slack block from the GameDigest."""
+
+    games_played = len(games)
+
+    if top_N_games:
+        games = games[:top_N_games]
 
     digest_blocks = _make_digest_blocks(player, games, n_days)
 

@@ -3,12 +3,14 @@ import chess.engine, chess.pgn, io
 from contextlib import contextmanager
 from prefect import task
 from pydantic import BaseModel
-from typing import Optional
+from rich.progress import track
+from typing import Optional, Union
 from typing_extensions import Literal
 
 from digest import GameDigest
 from platforms import ChessPlayer
-from settings import Color, OSBin
+from settings import DockerRepo, OSBin
+from utils import black, white
 
 ChessEngine = Literal["stockfish"]
 
@@ -22,36 +24,41 @@ class EngineConfig(BaseModel):
         threads: The number of threads to use.
     """
 
-    name: Literal["stockfish"] = "stockfish"
-    location: OSBin = OSBin.macos_m1
-    Threads: int = 4
+    name: ChessEngine = "stockfish"
+    location: Union[DockerRepo, OSBin] = DockerRepo.STOCKFISH
+    Threads: int = 2
 
     @property
-    def executable_path(self):
+    def exec_command(self):
+        if isinstance(self.location, DockerRepo):
+            return (
+                "docker run --rm -i -p 5000:5000 " f"{self.location.value} {self.name}"
+            ).split()
+
         return f"{self.location.value}{self.name}"
 
 
 @contextmanager
-def engine_running(engine_config: Optional[EngineConfig] = None, **kwargs):
+def run_engine(engine_config: Optional[EngineConfig] = None, **kwargs):
     """Context manager for the chess engine."""
     if not (engine_config or kwargs):
         print("Attempting to run stockfish @ default homebrew M1 MacOS location")
 
     config = engine_config or EngineConfig(**kwargs)
 
-    engine = chess.engine.SimpleEngine.popen_uci(config.executable_path)
+    engine = chess.engine.SimpleEngine.popen_uci(config.exec_command)
 
     engine.configure(config.dict(include={"Threads"}))
 
     print(
-        f"Booted up {config.name!r} @ {config.executable_path} "
+        f"Booted up {config.name!r} @ {config.location.value} "
         f"using {config.Threads} thread(s)"
     )
 
     try:
         yield engine
     finally:
-        engine.quit()
+        engine.close()
 
 
 @task(log_prints=True)
@@ -69,8 +76,8 @@ def calculate_total_cp_loss_for_game(
 
     print(
         f"Analyzing game on {player.platform} "
-        f"between {Color.WHITE.value + game.headers['White'] + Color.RESET.value} "
-        f"and {Color.BLACK.value + game.headers['Black'] + Color.RESET.value}"
+        f"between {white(game.headers['White'])} "
+        f"and {black(game.headers['Black'])}"
     )
 
     game_url = (
@@ -79,7 +86,7 @@ def calculate_total_cp_loss_for_game(
         else game.headers["Link"]
     )
 
-    for move in game.mainline_moves():
+    for move in track(game.mainline_moves()):
         analysis = engine.analyse(board, chess.engine.Limit(time=0.1))
 
         eval = getattr(analysis["score"], player_color)()
@@ -98,3 +105,8 @@ def calculate_total_cp_loss_for_game(
             "game_url": game_url,
         }
     )
+
+
+# if __name__ == "__main__":
+#     with run_engine() as engine:
+#         print(engine.id)
