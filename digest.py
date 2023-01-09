@@ -21,13 +21,15 @@ def _make_digest_blocks(player: ChessPlayer, games: List[GameDigest], n_days: in
 
     make_text = lambda game: (
         f"You had an average centipawn loss of {game.average_centipawn_loss} "
-        f"in this game: {game.game_url}"
+        f"in this one: {game.game_url}"
     )
+
+    n_games = " " + str(len(games)) if len(games) > 1 else ""
 
     greeting = (
         f"Hi {player.username} :slightly_smiling_face: "
-        f"here's your weekly :chess_pawn: digest for {player.platform} "
-        f"over the last {n_days} days:"
+        f"here's your{n_games} most accurate :chess_pawn: game(s) "
+        f"on {player.platform} over the last {n_days} days:"
     )
 
     blocks = [greeting] + games
@@ -47,6 +49,7 @@ def _make_digest_blocks(player: ChessPlayer, games: List[GameDigest], n_days: in
 @task
 def send_digest(
     player: ChessPlayer,
+    webhook_url: str,
     games: List[GameDigest],
     n_days: int,
     top_N_games: Optional[int] = None,
@@ -61,7 +64,7 @@ def send_digest(
     digest_blocks = _make_digest_blocks(player, games, n_days)
 
     response = httpx.post(
-        url=Secret.load("slack-digest-url").get(),
+        url=Secret.load(webhook_url).get(),
         json={"blocks": digest_blocks},
         headers={"Content-type": "application/json"},
     )

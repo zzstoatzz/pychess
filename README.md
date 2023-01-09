@@ -10,8 +10,9 @@ Requires python 3.10+ and `prefect>=2.7.7`
 
 ### Auxilliary resources
 - a chess engine (like stockfish) running at some path accessible to your machine, e.g. `opt/homebrew/bin/stockfish`
-    - by default, the flow will attempt to run a docker container that already has Stockfish 15 installed
-    - you can pass an `EngineConfig` to the `run_engine` context manager to specify a different engine location
+    - by default, the flow will attempt to run a docker container that already has Stockfish 15 installed,
+    which means you need docker running on the machine thats running the flow
+    - you can pass an `EngineConfig` to the `run_engine` context manager to specify a different engine location / # threads
 
 - [Prefect secret](https://discourse.prefect.io/t/how-to-securely-store-secrets-in-prefect-2-0/1209) called `slack-digest-url` that stores your desired webhook URL (will potentially add NotifBlock in future)
 

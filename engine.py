@@ -25,7 +25,7 @@ class EngineConfig(BaseModel):
     """
 
     name: ChessEngine = "stockfish"
-    location: Union[DockerRepo, OSBin] = DockerRepo.STOCKFISH
+    location: Union[DockerRepo, OSBin] = OSBin.macos_m1
     Threads: int = 2
 
     @property
@@ -42,7 +42,9 @@ class EngineConfig(BaseModel):
 def run_engine(engine_config: Optional[EngineConfig] = None, **kwargs):
     """Context manager for the chess engine."""
     if not (engine_config or kwargs):
-        print("Attempting to run stockfish @ default homebrew M1 MacOS location")
+        print(
+            f"Attempting to run stockfish @ {EngineConfig.__fields__['location'].default}"
+        )
 
     config = engine_config or EngineConfig(**kwargs)
 
@@ -51,7 +53,7 @@ def run_engine(engine_config: Optional[EngineConfig] = None, **kwargs):
     engine.configure(config.dict(include={"Threads"}))
 
     print(
-        f"Booted up {config.name!r} @ {config.location.value} "
+        f"Booted up {config.name!r} from {config.location.value} "
         f"using {config.Threads} thread(s)"
     )
 

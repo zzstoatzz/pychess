@@ -9,6 +9,7 @@ from platforms import ChessPlayer, retrieve_pgns_for_player
 @flow(log_prints=True)
 def weekly_digest(
     player: ChessPlayer,
+    webhook_url_name: str = "slack-digest-url",
     engine_config: Optional[EngineConfig] = None,
     n_days: int = 7,
     top_N_games: int = 3,
@@ -20,7 +21,7 @@ def weekly_digest(
     pgns = retrieve_pgns_for_player(player=player, n_days=n_days)
 
     if not pgns:
-        print("No games found :( try increasing `n_days`")
+        print("No games found :( try increasing `n_days` or like, play more chess?")
         return
 
     with run_engine(engine_config) as engine:
@@ -30,11 +31,10 @@ def weekly_digest(
 
     game_digests.sort(key=lambda x: x.average_centipawn_loss, reverse=True)
 
-    send_digest(player, game_digests, n_days, top_N_games)
+    send_digest(player, webhook_url_name, game_digests, n_days, top_N_games)
 
 
 if __name__ == "__main__":
     weekly_digest(
-        player=dict(username="HowellV", platform="chess.com"),
-        n_days=2,
+        player=dict(username="glen_bishop", platform="chess.com"),
     )
