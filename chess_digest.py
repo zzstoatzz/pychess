@@ -6,8 +6,9 @@ from datetime import datetime, timedelta
 from enum import Enum
 from lichess.format import PGN
 from prefect import flow, task
-from pydantic import BaseModel, HttpUrl
-from typing import Any, Dict
+from prefect.blocks.system import Secret
+from pydantic import BaseModel, HttpUrl, validator
+from typing import Any, Dict, List
 from typing_extensions import Literal
 
 
@@ -16,6 +17,7 @@ class Color(Enum):
 
     BLACK = "\033[0;30m"
     WHITE = "\033[0;37m"
+    RESET = "\x1b[0m"
 
 
 ChessEngine = Literal["stockfish"]
@@ -45,6 +47,10 @@ class ChessPlayer(BaseModel):
 class GameDigest(BaseModel):
     average_centipawn_loss: float
     game_url: HttpUrl
+
+    @validator("average_centipawn_loss")
+    def round_centipawn_loss(cls, v):
+        return round(v, 2)
 
 
 @contextmanager
@@ -149,21 +155,23 @@ def retrieve_pgns_for_player(player: ChessPlayer, n_days: int):
     return pgns
 
 
-@task
+@task(log_prints=True)
 def calculate_total_cp_loss_for_game(
     player: ChessPlayer, pgn: str, engine: chess.engine.SimpleEngine
 ) -> Dict[str, Any]:
     """Analyze a game using the chess engine."""
 
     centipawn_losses = []
+
     board = chess.Board()
     game = chess.pgn.read_game(io.StringIO(pgn))
+
     player_color = "white" if player.username == game.headers["White"] else "black"
 
     print(
         f"Analyzing game on {player.platform} "
-        f"between {Color.WHITE.value + game.headers['White']!r} "
-        f"and {Color.WHITE.value + game.headers['Black']!r} "
+        f"between {Color.WHITE.value + game.headers['White'] + Color.RESET.value} "
+        f"and {Color.BLACK.value + game.headers['Black'] + Color.RESET.value}"
     )
 
     game_url = (
@@ -189,13 +197,53 @@ def calculate_total_cp_loss_for_game(
     }
 
 
+@task
+def send_digest(player: ChessPlayer, games: List[GameDigest], n_days: int):
+    """Builds a Slack block from the GameDigest."""
+
+    make_text = lambda game: (
+        f"You had an average centipawn loss of {game.average_centipawn_loss} "
+        f"in this game: {game.game_url}"
+    )
+
+    greeting = (
+        f"Hi {player.username} :slightly_smiling_face: "
+        f"here's your weekly :chess_pawn: digest for {player.platform} "
+        f"over the last {n_days} days:"
+    )
+
+    blocks = [greeting] + games
+
+    digest_blocks = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"{make_text(b) if isinstance(b, GameDigest) else b}",
+            },
+        }
+        for b in blocks
+    ]
+
+    response = httpx.post(
+        url=Secret.load("slack-digest-url").get(),
+        json={"blocks": digest_blocks},
+        headers={"Content-type": "application/json"},
+    )
+
+    if response.status_code != 200:
+        raise httpx.HTTPError(
+            message=f"Error sending digest to Slack: {response.status_code} {response.text}"
+        )
+
+
 @flow(log_prints=True)
 def weekly_digest(
     player: ChessPlayer,
     n_days: int = 7,
     engine_name: ChessEngine = "stockfish",
     engine_location: EngineLocation = EngineLocation.macos,
-    include_top_N_games: int = 5,
+    include_top_N_games: int = 3,
 ):
     """Send a weekly digest of chess games to the user."""
 
@@ -205,20 +253,20 @@ def weekly_digest(
 
     with engine_running(engine_name, engine_location) as engine:
 
-        centipawn_losses = [
+        game_digests = [
             GameDigest.parse_obj(calculate_total_cp_loss_for_game(player, pgn, engine))
             for pgn in pgns
         ]
 
-    centipawn_losses.sort(key=lambda x: x.average_centipawn_loss, reverse=True)
+    game_digests.sort(key=lambda x: x.average_centipawn_loss, reverse=True)
 
-    top_games = centipawn_losses[:include_top_N_games]
+    top_games = game_digests[:include_top_N_games]
 
-    print(f"Sending weekly digest to {player.username!r}")
-
-    print(f"{top_games!r}")
+    send_digest(player, top_games, n_days)
 
 
 if __name__ == "__main__":
-
-    weekly_digest(player=dict(username="n80n8", platform="chess.com"))
+    weekly_digest(
+        player=dict(username="n80n8", platform="lichess.org"),
+        n_days=7,
+    )
